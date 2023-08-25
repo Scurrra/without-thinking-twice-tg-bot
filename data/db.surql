@@ -63,6 +63,9 @@ define field tags
 define field tags.*
     on table interviewees
     type string;
+define field tests
+    on table interviewees
+    type object;
 
 -- define `tests` fields
 define field id
