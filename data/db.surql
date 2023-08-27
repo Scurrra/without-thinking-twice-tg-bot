@@ -17,8 +17,7 @@ let $interviewers_tags = ['admin'];
 define field id 
     on table interviewers 
     type string
-    assert $value != none 
-        and string::startsWith($value, '@');
+    assert $value != none;
 define field name 
     on table interviewers 
     type string
@@ -31,7 +30,7 @@ define field tags
     on table interviewers
     type array
     value $value or ['admin']
-    assert $value inside $interviewers_tags;
+    assert $value allinside $interviewers_tags;
 define field tags.*
     on table interviewers
     type string;
@@ -46,8 +45,7 @@ define field tests.*
 define field id 
     on table interviewees 
     type string
-    assert $value != none 
-        and string::startsWith($value, '@');
+    assert $value != none;
 define field name 
     on table interviewees 
     type string

@@ -1,3 +1,5 @@
+import os
+
 import asyncio
 from typing import NoReturn
 
@@ -16,9 +18,24 @@ from surrealdb import Surreal
 db = Surreal(f"ws://localhost:{config['db']['port']}/rpc")
 
 @dp.message(Command("start"))
-async def start(message: types.Message) -> None:
+async def cmd_start(message: types.Message) -> None:
     """Send a message when the command /start is issued."""
-    await message.answer("Without thinking twice Bot")
+    user = await db.select(f"interviewers:{message.from_user.username}")
+    if user is None:
+        user = await db.select(f"interviewees:{message.from_user.username}")
+        if user is None:
+            await message.answer("You are not registered")
+        else:
+            await message.reply(f"Hello, {user['name']}")
+            await message.answer(f"You are registered with tags {user['tags']}. You can only take tests you are assigned to.")
+    else:
+        answer = ""
+        if "admin" in user["tags"]:
+            answer += "You are registered as `admin` so you can add other interviewers to the bot.\n\n"
+        answer += f"You roles are {user['tags']}"
+        await message.reply(f"Hello, {user['name']}")
+        await message.answer(answer)
+            
 
 async def db_connect():
     await db.connect()
@@ -27,6 +44,25 @@ async def db_connect():
 
 async def main() -> NoReturn:
     await db_connect()
+
+    await db.let(
+        "interviewers_tags",
+        config["bot"]["interviewers_tags"]
+    )
+    try:
+        await db.create(
+            f"interviewers:{config['bot']['admin']['id']}",
+            {
+                "id": config['bot']['admin']['id'],
+                "name": config['bot']['admin']['name'],
+                "description": config['bot']['admin']['description'],
+                "tags": config['bot']['admin']['tags'],
+                "tests": config['bot']['admin']['tests'],
+            }
+        )
+    except:
+        print("\n\tDefault admin already exists\n")
+        pass
 
     bot = Bot(token=config["bot"]["token"])
     await dp.start_polling(bot)
