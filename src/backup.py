@@ -1,11 +1,12 @@
-from . import db
+from main import db_connect
 
 import json
-import os
+from pathlib import Path
 from datetime import datetime
 
 from aiogram import Router, types, F
 from aiogram.filters.command import Command
+from aiogram.types import FSInputFile
 from aiogram.types.input_media_document import InputMediaDocument
 
 router = Router()
@@ -13,6 +14,7 @@ router = Router()
 @router.message(Command("backup"))
 async def cmd_backup(message: types.Message) -> None:
     """Start a backup with a command /backup"""
+    db = await db_connect()
     user = await db.select(f"interviewers:{message.from_user.username}")
     if user is not None and "admin" in user["tags"]:
         buttons = [[
@@ -32,23 +34,25 @@ async def cmd_backup(message: types.Message) -> None:
 @router.callback_query(F.data == "local_backup")
 async def cb_local_backup(callback: types.CallbackQuery) -> None:
     """Perform only local backup"""
-    if not os.path.isdir("../data/backups"):
-        os.mkdir("../data/backups")
+    db = await db_connect()
+    path = Path("../data/backups")
+    if not path.is_dir():
+        path.mkdir()
 
     now = datetime.now()
-    path = f"../data/backups/{now.strftime('%d.%m.%Y_%H:%M:%S')}"
-    os.mkdir(path)
+    path = path / f"{now.strftime('%d.%m.%Y_%H:%M:%S')}"
+    path.mkdir()
 
     interviewers = await db.select("interviewers")
     interviewees = await db.select("interviewees")
     tests = await db.select("tests")
 
     with open(f"{path}/interviewers.json", "w") as interviewers_file:
-        json.dump(interviewers, interviewers_file)
+        json.dump(interviewers, interviewers_file, indent=2)
     with open(f"{path}/interviewees.json", "w") as interviewees_file:
-        json.dump(interviewees, interviewees_file)
-    with open(f"{path}/tetss.json", "w") as tests_file:
-        json.dump(tests, tests_file)
+        json.dump(interviewees, interviewees_file, indent=2)
+    with open(f"{path}/tests.json", "w") as tests_file:
+        json.dump(tests, tests_file, indent=2)
 
     await callback.message.reply(f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}")
     await callback.answer()
@@ -56,30 +60,29 @@ async def cb_local_backup(callback: types.CallbackQuery) -> None:
 @router.callback_query(F.data == "tg_backup")
 async def cb_tg_backup(callback: types.CallbackQuery) -> None:
     """Perform local & telegram backup"""
-    if not os.path.isdir("../data/backups"):
-        os.mkdir("../data/backups")
+    db = await db_connect()
+    path = Path("data/backups")
+    if not path.exists():
+        path.mkdir()
 
     now = datetime.now()
-    path = f"../data/backups/{now.strftime('%d.%m.%Y_%H:%M:%S')}"
-    os.mkdir(path)
+    path = path / f"{now.strftime('%d.%m.%Y_%H:%M:%S')}"
+    path.mkdir()
 
     interviewers = await db.select("interviewers")
     interviewees = await db.select("interviewees")
     tests = await db.select("tests")
     
     with open(f"{path}/interviewers.json", "w") as interviewers_file:
-        json.dump(interviewers, interviewers_file)
-        await callback.message.answer_document(interviewers_file, caption="Interviewers data")
+        json.dump(interviewers, interviewers_file, indent=2)
     with open(f"{path}/interviewees.json", "w") as interviewees_file:
-        json.dump(interviewees, interviewees_file)
-        await callback.message.answer_document(interviewees_file, caption="Interviewees data")
-    with open(f"{path}/tetss.json", "w") as tests_file:
-        json.dump(tests, tests_file)
-        await callback.message.answer_document(tests_file, caption="Tests data")
-    callback.message.answer_media_group(media=[
-        InputMediaDocument(f"{path}/interviewers.json"),
-        InputMediaDocument(f"{path}/interviewees.json"),
-        InputMediaDocument(f"{path}/tests.json"),
+        json.dump(interviewees, interviewees_file, indent=2)
+    with open(f"{path}/tests.json", "w") as tests_file:
+        json.dump(tests, tests_file, indent=2)
+    await callback.message.answer_media_group(media=[
+        InputMediaDocument(media=FSInputFile(path / "interviewers.json")),
+        InputMediaDocument(media=FSInputFile(path / "interviewees.json")),
+        InputMediaDocument(media=FSInputFile(path / "tests.json"))
     ])
     await callback.message.reply(f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}")
     await callback.answer()
@@ -87,6 +90,7 @@ async def cb_tg_backup(callback: types.CallbackQuery) -> None:
 @router.message(Command("restore"))
 async def cmd_restore(message: types.Message) -> None:
     """Start a restore with a command /restore"""
+    db = db_connect()
     user = await db.select(f"interviewers:{message.from_user.username}")
     if user is not None and "admin" in user["tags"]:
         buttons = [[
@@ -106,10 +110,11 @@ async def cmd_restore(message: types.Message) -> None:
 @router.callback_query(F.data == "local_restore")
 async def cb_local_restore(callback: types.CallbackQuery) -> None:
     """Perform local restore"""
+    path = Path("../data/backups")
     backups = [
-        os.path.basename(os.path.normpath(backup))
-        for backup in os.scandir("../data/backups")
-        if os.path.isdir(backup)
+        backup.parts()[-1]
+        for backup in path.iterdir()
+        if backup.isdir()
     ]
     buttons = [
         [types.InlineKeyboardButton(text=backup.replace("_", " "), callback_data=f"backup_{backup}")]

@@ -1,5 +1,3 @@
-import backup
-
 import os
 
 import asyncio
@@ -37,12 +35,17 @@ async def cmd_start(message: types.Message) -> None:
         answer += f"You roles are {user['tags']}"
         await message.reply(f"Hello, {user['name']}")
         await message.answer(answer)
-            
+        await message.answer(str(await db.info()))
 
-async def db_connect():
+async def db_connect() -> Surreal:
+    """Just the way to connect to the database"""
     await db.connect()
     await db.signin({"user": config["db"]["user"], "pass": config["db"]["pass"]})
     await db.use(config["db"]["ns"], config["db"]["db"])
+    return db
+
+#############
+import backup
 
 async def main() -> NoReturn:
     await db_connect()
@@ -67,6 +70,7 @@ async def main() -> NoReturn:
         pass
 
     bot = Bot(token=config["bot"]["token"])
+    dp.include_router(backup.router)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
