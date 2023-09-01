@@ -42,6 +42,7 @@ async def db_connect() -> Surreal:
     await db.connect()
     await db.signin({"user": config["db"]["user"], "pass": config["db"]["pass"]})
     await db.use(config["db"]["ns"], config["db"]["db"])
+    await db.let("interviewers_tags", config["bot"]["interviewers_tags"])
     return db
 
 #############
@@ -50,10 +51,6 @@ import backup
 async def main() -> NoReturn:
     await db_connect()
 
-    await db.let(
-        "interviewers_tags",
-        config["bot"]["interviewers_tags"]
-    )
     try:
         await db.create(
             f"interviewers:{config['bot']['admin']['id']}",

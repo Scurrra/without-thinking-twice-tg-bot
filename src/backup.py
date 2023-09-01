@@ -1,4 +1,4 @@
-from main import db_connect
+from main import db_connect, config
 
 import json
 from pathlib import Path
@@ -53,8 +53,12 @@ async def cb_local_backup(callback: types.CallbackQuery) -> None:
         json.dump(interviewees, interviewees_file, indent=2)
     with open(f"{path}/tests.json", "w") as tests_file:
         json.dump(tests, tests_file, indent=2)
+    with open(f"{path}/interviewers_tags.json", "w") as interviewers_tags_file:
+        json.dump((await db.query("return $interviewers_tags"))[0]["result"], interviewers_tags_file, indent=2)
 
-    await callback.message.reply(f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}")
+    await callback.message.reply(
+        f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}"
+    )
     await callback.answer()
 
 @router.callback_query(F.data == "tg_backup")
@@ -62,7 +66,7 @@ async def cb_tg_backup(callback: types.CallbackQuery) -> None:
     """Perform local & telegram backup"""
     db = await db_connect()
     path = Path("data/backups")
-    if not path.exists():
+    if not path.is_dir():
         path.mkdir()
 
     now = datetime.now()
@@ -79,12 +83,18 @@ async def cb_tg_backup(callback: types.CallbackQuery) -> None:
         json.dump(interviewees, interviewees_file, indent=2)
     with open(f"{path}/tests.json", "w") as tests_file:
         json.dump(tests, tests_file, indent=2)
+    with open(f"{path}/interviewers_tags.json", "w") as interviewers_tags_file:
+        json.dump((await db.query("return $interviewers_tags"))[0]["result"], interviewers_tags_file, indent=2)
     await callback.message.answer_media_group(media=[
         InputMediaDocument(media=FSInputFile(path / "interviewers.json")),
         InputMediaDocument(media=FSInputFile(path / "interviewees.json")),
-        InputMediaDocument(media=FSInputFile(path / "tests.json"))
+        InputMediaDocument(media=FSInputFile(path / "tests.json")),
+        InputMediaDocument(media=FSInputFile(path / "interviewers_tags.json")),
     ])
-    await callback.message.reply(f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}")
+
+    await callback.message.reply(
+        f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}"
+    )
     await callback.answer()
 
 @router.message(Command("restore"))
@@ -112,9 +122,9 @@ async def cb_local_restore(callback: types.CallbackQuery) -> None:
     """Perform local restore"""
     path = Path("data/backups")
     backups = [
-        backup.parts()[-1]
+        backup.parts[-1]
         for backup in path.iterdir()
-        if backup.isdir()
+        if backup.is_dir()
     ]
     buttons = [
         [types.InlineKeyboardButton(text=backup.replace("_", " "), callback_data=f"backup_{backup}")]
@@ -130,8 +140,61 @@ async def cb_local_restore(callback: types.CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("backup_"))
 async def cb_local_restore_backup(callback: types.CallbackQuery) -> None:
     """Restore specified backup"""
-    #TODO: 
-    pass
+    db = await db_connect()
+    
+    backup = "_".join(callback.data.split("_")[1:])
+    path = Path("data/backups") / backup
+
+    interviewers_tags_backed = json.loads((path / "interviewers.json").read_text(encoding="UTF-8"))
+    await db.update("interviewers_tags", interviewers_tags_backed)
+
+    # interviewers
+    interviewers_db_ids = (await db.query("select value id from interviewers"))[0]["result"]
+    interviewers_backed = json.loads((path / "interviewers.json").read_text(encoding="UTF-8"))
+    for backed in interviewers_backed:
+        try:
+            try:
+                await db.update(backed["id"], backed)
+                interviewers_db_ids.remove(backed["id"])
+            except:
+                await db.create(backed["id"], backed)
+        except:
+            await callback.message.answer(f"Can't restore `{backed['id']}`")
+    for id in interviewers_db_ids:
+        await db.delete(id)
+    
+    # interviewees
+    interviewees_db_ids = (await db.query("select value id from interviewees"))[0]["result"]
+    interviewees_backed = json.loads((path / "interviewees.json").read_text(encoding="UTF-8"))
+    for backed in interviewees_backed:
+        try:
+            try:
+                await db.update(backed["id"], backed)
+                interviewees_db_ids.remove(backed["id"])
+            except:
+                await db.create(backed["id"], backed)
+        except:
+            await callback.message.answer(f"Can't restore `{backed['id']}`")
+    for id in interviewees_db_ids:
+        await db.delete(id)
+    
+    # tests
+    tests_db_ids = (await db.query("select value id from tests"))[0]["result"]
+    tests_backed = json.loads((path / "tests.json").read_text(encoding="UTF-8"))
+    for backed in tests_backed:
+        try:
+            try:
+                await db.update(backed["id"], backed)
+                tests_db_ids.remove(backed["id"])
+            except:
+                await db.create(backed["id"], backed)
+        except:
+            await callback.message.answer(f"Can't restore `{backed['id']}`")
+    for id in tests_db_ids:
+        await db.delete(id)
+        
+    await callback.message.reply(f"Database restored from backup `{backup.replace('_', ' ')}`")   
+    callback.answer()
 
 @router.callback_query(F.data == "tg_restore")
 async def cb_tg_restore(callback: types.CallbackQuery) -> None:
