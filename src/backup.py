@@ -35,7 +35,7 @@ async def cmd_backup(message: types.Message) -> None:
 async def cb_local_backup(callback: types.CallbackQuery) -> None:
     """Perform only local backup"""
     db = await db_connect()
-    path = Path("../data/backups")
+    path = Path("data/backups")
     if not path.is_dir():
         path.mkdir()
 
@@ -90,7 +90,7 @@ async def cb_tg_backup(callback: types.CallbackQuery) -> None:
 @router.message(Command("restore"))
 async def cmd_restore(message: types.Message) -> None:
     """Start a restore with a command /restore"""
-    db = db_connect()
+    db = await db_connect()
     user = await db.select(f"interviewers:{message.from_user.username}")
     if user is not None and "admin" in user["tags"]:
         buttons = [[
@@ -110,7 +110,7 @@ async def cmd_restore(message: types.Message) -> None:
 @router.callback_query(F.data == "local_restore")
 async def cb_local_restore(callback: types.CallbackQuery) -> None:
     """Perform local restore"""
-    path = Path("../data/backups")
+    path = Path("data/backups")
     backups = [
         backup.parts()[-1]
         for backup in path.iterdir()
