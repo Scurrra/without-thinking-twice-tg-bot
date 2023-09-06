@@ -1,3 +1,6 @@
+import structlog
+log = structlog.get_logger()
+
 import os
 from pathlib import Path
 
@@ -78,7 +81,7 @@ async def main() -> NoReturn:
             for backed in tests_backed:
                 await db.create(backed["id"], backed)
 
-            print("Database is restored from the last backup")
+            log.info("Database is restored from the last backup")
         else:
             await db.let("interviewers_tags", config["bot"]["interviewers_tags"])
             await db.create(
@@ -92,9 +95,9 @@ async def main() -> NoReturn:
                 }
             )
 
-            print("Database is created from config file")
+            log.info("Database is created from config file")
     except:
-        print("\n\tHas to be unreachable\n")
+        log.warning("Has to be unreachable")
         pass
 
     bot = Bot(token=config["bot"]["token"])

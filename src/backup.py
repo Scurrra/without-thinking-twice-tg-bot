@@ -1,4 +1,4 @@
-from main import db_connect, config
+from main import db_connect, config, log
 
 import json
 import os
@@ -59,6 +59,7 @@ async def cb_local_backup(callback: types.CallbackQuery) -> None:
     with open(f"{path}/interviewers_tags.json", "w") as interviewers_tags_file:
         json.dump((await db.query("return $interviewers_tags"))[0]["result"], interviewers_tags_file, indent=2)
 
+    log.info(f"Local backup was created ({now.strftime('%d.%m.%Y, %H:%M:%S')})")
     await callback.message.reply(
         f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}"
     )
@@ -95,6 +96,7 @@ async def cb_tg_backup(callback: types.CallbackQuery) -> None:
         InputMediaDocument(media=FSInputFile(path / "interviewers_tags.json")),
     ])
 
+    log.info(f"Local and Telegram backup was created ({now.strftime('%d.%m.%Y, %H:%M:%S')})")
     await callback.message.reply(
         f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}"
     )
@@ -134,6 +136,7 @@ async def cb_local_restore(callback: types.CallbackQuery) -> None:
         for backup in backups
     ]
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
     await callback.message.answer(
         "Select backup to restore",
         reply_markup=keyboard
@@ -196,6 +199,7 @@ async def cb_local_restore_backup(callback: types.CallbackQuery) -> None:
     for id in tests_db_ids:
         await db.delete(id)
         
+    log.info(f"Backup was restored ({backup.replace('_', ' ')})")
     await callback.message.reply(f"Database restored from backup `{backup.replace('_', ' ')}`")   
     await callback.answer()
 
