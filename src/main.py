@@ -1,7 +1,9 @@
 import os
+from pathlib import Path
 
 import asyncio
 from typing import NoReturn
+import json
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters.command import Command
@@ -49,21 +51,50 @@ async def db_connect() -> Surreal:
 import backup
 
 async def main() -> NoReturn:
-    await db_connect()
+    db = await db_connect()
 
     try:
-        await db.create(
-            f"interviewers:{config['bot']['admin']['id']}",
-            {
-                "id": config['bot']['admin']['id'],
-                "name": config['bot']['admin']['name'],
-                "description": config['bot']['admin']['description'],
-                "tags": config['bot']['admin']['tags'],
-                "tests": config['bot']['admin']['tests'],
-            }
-        )
+        backups = [
+            b for b in sorted(Path("data/backups").iterdir(), key=os.path.getctime)
+            if b.is_dir()
+        ]
+        if len(backups) != 0:
+            path = backups[-1]
+            interviewers_tags_backed = json.loads((path / "interviewers.json").read_text(encoding="UTF-8"))
+            await db.update("interviewers_tags", interviewers_tags_backed)
+
+            await db.delete("interviewers")
+            interviewers_backed = json.loads((path / "interviewers.json").read_text(encoding="UTF-8"))
+            for backed in interviewers_backed:
+                await db.create(backed["id"], backed)
+
+            await db.delete("interviewees")
+            interviewees_backed = json.loads((path / "interviewees.json").read_text(encoding="UTF-8"))
+            for backed in interviewees_backed:
+                await db.create(backed["id"], backed)
+
+            await db.delete("tests")
+            tests_backed = json.loads((path / "tests.json").read_text(encoding="UTF-8"))
+            for backed in tests_backed:
+                await db.create(backed["id"], backed)
+
+            print("Database is restored from the last backup")
+        else:
+            await db.let("interviewers_tags", config["bot"]["interviewers_tags"])
+            await db.create(
+                f"interviewers:{config['bot']['admin']['id']}",
+                {
+                    "id": config['bot']['admin']['id'],
+                    "name": config['bot']['admin']['name'],
+                    "description": config['bot']['admin']['description'],
+                    "tags": config['bot']['admin']['tags'],
+                    "tests": config['bot']['admin']['tests'],
+                }
+            )
+
+            print("Database is created from config file")
     except:
-        print("\n\tDefault admin already exists\n")
+        print("\n\tHas to be unreachable\n")
         pass
 
     bot = Bot(token=config["bot"]["token"])

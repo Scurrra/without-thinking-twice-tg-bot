@@ -1,6 +1,7 @@
 from main import db_connect, config
 
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -8,6 +9,8 @@ from aiogram import Router, types, F
 from aiogram.filters.command import Command
 from aiogram.types import FSInputFile
 from aiogram.types.input_media_document import InputMediaDocument
+
+from aiogram_media_group import media_group_handler
 
 router = Router()
 
@@ -123,7 +126,7 @@ async def cb_local_restore(callback: types.CallbackQuery) -> None:
     path = Path("data/backups")
     backups = [
         backup.parts[-1]
-        for backup in path.iterdir()
+        for backup in sorted(path.iterdir(), key=os.path.getctime)
         if backup.is_dir()
     ]
     buttons = [
@@ -135,7 +138,7 @@ async def cb_local_restore(callback: types.CallbackQuery) -> None:
         "Select backup to restore",
         reply_markup=keyboard
     )
-    callback.answer()
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("backup_"))
 async def cb_local_restore_backup(callback: types.CallbackQuery) -> None:
@@ -194,7 +197,7 @@ async def cb_local_restore_backup(callback: types.CallbackQuery) -> None:
         await db.delete(id)
         
     await callback.message.reply(f"Database restored from backup `{backup.replace('_', ' ')}`")   
-    callback.answer()
+    await callback.answer()
 
 @router.callback_query(F.data == "tg_restore")
 async def cb_tg_restore(callback: types.CallbackQuery) -> None:
@@ -202,8 +205,9 @@ async def cb_tg_restore(callback: types.CallbackQuery) -> None:
     #TODO:
     pass
 
-@router.callback_query(F.data)
-async def cb_tg_restore_files(callback: types.CallbackQuery) -> None:
+@router.message(F.is_media_group & F.content_type==types.ContentType.DOCUMENT)
+@media_group_handler
+async def cb_tg_restore_files(message: types.Message) -> None:
     """Perform restore from Telegram files"""
     #TODO:
     pass
