@@ -1,23 +1,26 @@
-from main import db_connect, config, log
+from singletons.database import Database
+from singletons.bot import Bot
+from singletons.logger import Logger
+log = Logger()
 
-import json
 import os
 from pathlib import Path
 from datetime import datetime
+
+import json
 
 from aiogram import Router, types, F
 from aiogram.filters.command import Command
 from aiogram.types import FSInputFile
 from aiogram.types.input_media_document import InputMediaDocument
+router = Router()
 
 from aiogram_media_group import media_group_handler
-
-router = Router()
 
 @router.message(Command("backup"))
 async def cmd_backup(message: types.Message) -> None:
     """Start a backup with a command /backup"""
-    db = await db_connect()
+    db = await Database()
     user = await db.select(f"interviewers:{message.from_user.username}")
     if user is not None and "admin" in user["tags"]:
         buttons = [[
@@ -37,7 +40,7 @@ async def cmd_backup(message: types.Message) -> None:
 @router.callback_query(F.data == "local_backup")
 async def cb_local_backup(callback: types.CallbackQuery) -> None:
     """Perform only local backup"""
-    db = await db_connect()
+    db = await Database()
     path = Path("data/backups")
     if not path.is_dir():
         path.mkdir()
@@ -59,7 +62,7 @@ async def cb_local_backup(callback: types.CallbackQuery) -> None:
     with open(f"{path}/interviewers_tags.json", "w") as interviewers_tags_file:
         json.dump((await db.query("return $interviewers_tags"))[0]["result"], interviewers_tags_file, indent=2)
 
-    log.info(f"Local backup was created ({now.strftime('%d.%m.%Y, %H:%M:%S')})")
+    log.info(f"Local backup was created by {callback.message.from_user.username} ({now.strftime('%d.%m.%Y, %H:%M:%S')})")
     await callback.message.reply(
         f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}"
     )
@@ -68,7 +71,7 @@ async def cb_local_backup(callback: types.CallbackQuery) -> None:
 @router.callback_query(F.data == "tg_backup")
 async def cb_tg_backup(callback: types.CallbackQuery) -> None:
     """Perform local & telegram backup"""
-    db = await db_connect()
+    db = await Database()
     path = Path("data/backups")
     if not path.is_dir():
         path.mkdir()
@@ -96,7 +99,7 @@ async def cb_tg_backup(callback: types.CallbackQuery) -> None:
         InputMediaDocument(media=FSInputFile(path / "interviewers_tags.json")),
     ])
 
-    log.info(f"Local and Telegram backup was created ({now.strftime('%d.%m.%Y, %H:%M:%S')})")
+    log.info(f"Local and Telegram backup was created by {callback.message.from_user.username} ({now.strftime('%d.%m.%Y, %H:%M:%S')})")
     await callback.message.reply(
         f"Database was backuped at {now.strftime('%d.%m.%Y, %H:%M:%S')}"
     )
@@ -105,7 +108,7 @@ async def cb_tg_backup(callback: types.CallbackQuery) -> None:
 @router.message(Command("restore"))
 async def cmd_restore(message: types.Message) -> None:
     """Start a restore with a command /restore"""
-    db = await db_connect()
+    db = await Database()
     user = await db.select(f"interviewers:{message.from_user.username}")
     if user is not None and "admin" in user["tags"]:
         buttons = [[
@@ -146,7 +149,7 @@ async def cb_local_restore(callback: types.CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("backup_"))
 async def cb_local_restore_backup(callback: types.CallbackQuery) -> None:
     """Restore specified backup"""
-    db = await db_connect()
+    db = await Database()
     
     backup = "_".join(callback.data.split("_")[1:])
     path = Path("data/backups") / backup
@@ -199,7 +202,7 @@ async def cb_local_restore_backup(callback: types.CallbackQuery) -> None:
     for id in tests_db_ids:
         await db.delete(id)
         
-    log.info(f"Backup was restored ({backup.replace('_', ' ')})")
+    log.info(f"Backup was restored by {callback.message.from_user.username} ({backup.replace('_', ' ')})")
     await callback.message.reply(f"Database restored from backup `{backup.replace('_', ' ')}`")   
     await callback.answer()
 

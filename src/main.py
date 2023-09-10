@@ -1,30 +1,33 @@
-import structlog
-log = structlog.get_logger()
-
-import os
-from pathlib import Path
-
-import asyncio
-from typing import NoReturn
-import json
-
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters.command import Command
-
-dp = Dispatcher()
-
 from yaml import safe_load
 config = {
     "bot": safe_load(open("config/bot_config.yaml", "r")),
     "db": safe_load(open("config/db_config.yaml", "r"))
 }
 
-from surrealdb import Surreal
-db = Surreal(f"ws://localhost:{config['db']['port']}/rpc")
+from singletons.database import Database
+from singletons.bot import Bot
+from singletons.logger import Logger
+log = Logger()
+
+import os
+from pathlib import Path
+
+from typing import NoReturn
+import json
+
+import asyncio
+from aiogram import Dispatcher, types
+from aiogram.filters.command import Command
+dp = Dispatcher()
+
+# routers
+import backup
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message) -> None:
     """Send a message when the command /start is issued."""
+    db = await Database()
+
     user = await db.select(f"interviewers:{message.from_user.username}")
     if user is None:
         user = await db.select(f"interviewees:{message.from_user.username}")
@@ -40,21 +43,10 @@ async def cmd_start(message: types.Message) -> None:
         answer += f"You roles are {user['tags']}"
         await message.reply(f"Hello, {user['name']}")
         await message.answer(answer)
-        await message.answer(str(await db.info()))
 
-async def db_connect() -> Surreal:
-    """Just the way to connect to the database"""
-    await db.connect()
-    await db.signin({"user": config["db"]["user"], "pass": config["db"]["pass"]})
-    await db.use(config["db"]["ns"], config["db"]["db"])
-    await db.let("interviewers_tags", config["bot"]["interviewers_tags"])
-    return db
-
-#############
-import backup
 
 async def main() -> NoReturn:
-    db = await db_connect()
+    db = await Database()
 
     try:
         backups = [
@@ -100,7 +92,7 @@ async def main() -> NoReturn:
         log.warning("Has to be unreachable")
         pass
 
-    bot = Bot(token=config["bot"]["token"])
+    bot = Bot()
     dp.include_router(backup.router)
     await dp.start_polling(bot)
 
